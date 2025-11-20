@@ -29,8 +29,18 @@ const UserAuth = {
         localStorage.removeItem('starchart_session');
     },
 
-    // Hash password (simple hash for demo - use bcrypt in production)
-    hashPassword: function(password) {
+    // Hash password using SHA-256 (using Web Crypto API for client-side security)
+    hashPassword: async function(password) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    },
+
+    // Synchronous version for compatibility (less secure but necessary for sync operations)
+    hashPasswordSync: function(password) {
+        // Fallback to basic hash if Web Crypto API is not available
         let hash = 0;
         for (let i = 0; i < password.length; i++) {
             const char = password.charCodeAt(i);
@@ -40,8 +50,8 @@ const UserAuth = {
         return hash.toString(36);
     },
 
-    // Register new user
-    register: function(username, password) {
+    // Register new user (async version to handle async hashing)
+    register: async function(username, password) {
         // Validation
         if (!username || !password) {
             return { success: false, message: 'Username and password are required' };
@@ -64,7 +74,7 @@ const UserAuth = {
 
         // Create new user (always as regular user, only Cyrus is admin)
         users[username] = {
-            password: this.hashPassword(password),
+            password: await this.hashPassword(password),
             createdAt: new Date().toISOString(),
             role: 'user'
         };
@@ -74,8 +84,8 @@ const UserAuth = {
         return { success: true, message: 'Account created successfully!' };
     },
 
-    // Login user
-    login: function(username, password) {
+    // Login user (async version to handle async hashing)
+    login: async function(username, password) {
         const users = this.getUsers();
 
         // Check if user exists
@@ -84,7 +94,7 @@ const UserAuth = {
         }
 
         // Verify password
-        const hashedPassword = this.hashPassword(password);
+        const hashedPassword = await this.hashPassword(password);
         if (users[username].password !== hashedPassword) {
             return { success: false, message: 'Invalid username or password' };
         }
@@ -119,8 +129,15 @@ const UserAuth = {
         return username === 'Cyrus';
     },
 
-    // Delete account
-    deleteAccount: function(password) {
+    // Sanitize HTML to prevent XSS
+    sanitizeHTML: function(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    },
+
+    // Delete account (async version to handle async hashing)
+    deleteAccount: async function(password) {
         const username = this.getCurrentUser();
         if (!username) {
             return { success: false, message: 'Not logged in' };
@@ -132,7 +149,7 @@ const UserAuth = {
         }
 
         const users = this.getUsers();
-        const hashedPassword = this.hashPassword(password);
+        const hashedPassword = await this.hashPassword(password);
 
         // Verify password
         if (users[username].password !== hashedPassword) {
@@ -161,15 +178,16 @@ const UserAuth = {
 };
 
 // Initialize Cyrus admin account if no users exist
-(function initializeAdmin() {
+window.addEventListener('load', async function initializeAdmin() {
     const users = UserAuth.getUsers();
     if (Object.keys(users).length === 0) {
+        const hashedPassword = await UserAuth.hashPassword('cyrus123');
         users['Cyrus'] = {
-            password: UserAuth.hashPassword('cyrus123'),
- createdAt: new Date().toISOString(),
- role: 'admin'
+            password: hashedPassword,
+            createdAt: new Date().toISOString(),
+            role: 'admin'
         };
         UserAuth.saveUsers(users);
         console.log('Admin account created: username: Cyrus, password: cyrus123');
     }
-})();
+});

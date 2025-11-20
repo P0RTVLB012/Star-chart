@@ -678,14 +678,16 @@
 
 <script src="user.js"></script>
 <script>
+// For backward compatibility, keeping the synchronous isLoggedIn check
 if (!UserAuth.isLoggedIn()) {
     window.location.href = 'login.html';
 }
 
 const currentUser = UserAuth.getCurrentUser();
-document.getElementById('username').textContent = currentUser;
-document.getElementById('settings-username').textContent = currentUser;
-document.getElementById('starship-name').textContent = `${currentUser}'s Starship`;
+// Sanitize the username when displaying to prevent XSS
+document.getElementById('username').textContent = UserAuth.sanitizeHTML(currentUser);
+document.getElementById('settings-username').textContent = UserAuth.sanitizeHTML(currentUser);
+document.getElementById('starship-name').textContent = `${UserAuth.sanitizeHTML(currentUser)}'s Starship`;
 
 let todos = JSON.parse(localStorage.getItem(`${currentUser}_todos`) || '[]');
 let schedule = JSON.parse(localStorage.getItem(`${currentUser}_schedule`) || '[]');
@@ -699,9 +701,11 @@ function renderTodos() {
     todos.forEach((todo, index) => {
         const todoItem = document.createElement('div');
         todoItem.className = `todo-item ${todo.completed ? 'completed' : ''}`;
+        // Sanitize todo.text to prevent XSS
+        const sanitizedText = UserAuth.sanitizeHTML(todo.text);
         todoItem.innerHTML = `
             <input type="checkbox" ${todo.completed ? 'checked' : ''}>
-            <span>${todo.text}</span>
+            <span>${sanitizedText}</span>
             <button>×</button>
         `;
         todoItem.querySelector('input').addEventListener('change', () => {
@@ -751,9 +755,11 @@ function renderSchedule() {
     schedule.sort((a, b) => a.time.localeCompare(b.time)).forEach((item, index) => {
         const div = document.createElement('div');
         div.className = 'schedule-item';
+        // Sanitize item.event to prevent XSS
+        const sanitizedEvent = UserAuth.sanitizeHTML(item.event);
         div.innerHTML = `
             <div class="schedule-time">${item.time}</div>
-            <div class="schedule-event">${item.event}</div>
+            <div class="schedule-event">${sanitizedEvent}</div>
             <button class="delete-btn" onclick="deleteSchedule(${index})">×</button>
         `;
         scheduleGrid.appendChild(div);
@@ -784,11 +790,30 @@ function renderLinks() {
     links.forEach(link => {
         const linkItem = document.createElement('a');
         linkItem.className = 'link-item';
-        linkItem.href = link.url;
+        // Sanitize URL to prevent XSS
+        let sanitizedUrl = link.url;
+        if (!/^https?:\/\/.+/.test(sanitizedUrl)) {
+            sanitizedUrl = 'http://' + sanitizedUrl;
+        }
+        // Further validate URL
+        try {
+            new URL(sanitizedUrl);
+            linkItem.href = sanitizedUrl;
+        } catch (e) {
+            // If URL is invalid, don't set href
+            linkItem.href = '#';
+            linkItem.onclick = (e) => {
+                e.preventDefault();
+                alert('Invalid URL');
+            };
+        }
         linkItem.target = '_blank';
+        // Sanitize icon and name to prevent XSS
+        const sanitizedIcon = UserAuth.sanitizeHTML(link.icon);
+        const sanitizedName = UserAuth.sanitizeHTML(link.name);
         linkItem.innerHTML = `
-            <div class="link-icon">${link.icon}</div>
-            <div class="link-name">${link.name}</div>
+            <div class="link-icon">${sanitizedIcon}</div>
+            <div class="link-name">${sanitizedName}</div>
         `;
         linksGrid.appendChild(linkItem);
     });
@@ -823,7 +848,8 @@ function renderNotes() {
     notes.forEach((note, index) => {
         const div = document.createElement('div');
         div.className = `note-item ${index === currentNoteIndex ? 'active' : ''}`;
-        div.textContent = note.title || 'Untitled Note';
+        // Sanitize note title to prevent XSS
+        div.textContent = UserAuth.sanitizeHTML(note.title) || 'Untitled Note';
         div.onclick = () => {
             saveCurrentNote();
             currentNoteIndex = index;
@@ -836,14 +862,15 @@ function renderNotes() {
 }
 
 function displayNote(index) {
-    document.getElementById('note-title').value = notes[index].title;
-    document.getElementById('note-content').value = notes[index].content;
+    document.getElementById('note-title').value = notes[index].title || '';
+    document.getElementById('note-content').value = notes[index].content || '';
 }
 
 function saveCurrentNote() {
     if (notes.length > 0) {
-        notes[currentNoteIndex].title = document.getElementById('note-title').value;
-        notes[currentNoteIndex].content = document.getElementById('note-content').value;
+        // Sanitize inputs before saving to prevent XSS
+        notes[currentNoteIndex].title = UserAuth.sanitizeHTML(document.getElementById('note-title').value);
+        notes[currentNoteIndex].content = UserAuth.sanitizeHTML(document.getElementById('note-content').value);
         localStorage.setItem(`${currentUser}_notes`, JSON.stringify(notes));
     }
 }

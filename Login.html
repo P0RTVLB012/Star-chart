@@ -202,6 +202,15 @@
 
     <script src="user.js"></script>
     <script>
+        // If UserAuth doesn't have sanitizeHTML function, define it here
+        if (!UserAuth.sanitizeHTML) {
+            UserAuth.sanitizeHTML = function(str) {
+                const div = document.createElement('div');
+                div.textContent = str;
+                return div.innerHTML;
+            };
+        }
+
         // Generate stars
         const starsContainer = document.getElementById('stars');
         for (let i = 0; i < 150; i++) {
@@ -220,12 +229,16 @@
             setTimeout(() => errorEl.classList.remove('show'), 3000);
         }
 
-        function handleLogin(event) {
+        async function handleLogin(event) {
             event.preventDefault();
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
 
-            const result = UserAuth.login(username, password);
+            // Basic sanitization for display purposes
+            const username = UserAuth.sanitizeHTML(usernameInput.value);
+            const password = passwordInput.value; // Don't sanitize password for hashing
+
+            const result = await UserAuth.login(username, password);
 
             if (result.success) {
                 window.location.href = 'index.html';
@@ -234,14 +247,15 @@
             }
         }
 
-        function showRegister() {
+        async function showRegister() {
             const username = prompt('Choose a username:');
             if (!username) return;
 
             const password = prompt('Choose a password:');
             if (!password) return;
 
-            const result = UserAuth.register(username, password);
+            // Sanitize the username for storage/display
+            const result = await UserAuth.register(UserAuth.sanitizeHTML(username), password);
 
             if (result.success) {
                 showError = function(msg) {
